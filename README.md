@@ -2,12 +2,16 @@
 
 Convert [ExamTopics](https://www.examtopics.com/exams/) pages to Anki decks!
 
+## Requirements
+
+- [chromedriver](https://chromedriver.chromium.org/) must be installed and available on your PATH environment variable
+
 ## Usage
 
 ```
 Usage: exams2anki.py <provider> <exam> <username> <password>
 Example: exams2anki.py amazon aws-certified-cloud-practitioner username password
-You can also set user email and password as environment variables EXAM_TOPICS_EMAIL and EXAM_TOPICS_PASSWORD
+You can also set username and password as environment variables EXAM_TOPICS_EMAIL and EXAM_TOPICS_PASSWORD
 To get exam details look for the url on examtopics.com/exams - you MUST have Contributor Access to the exam!
 ```
 
