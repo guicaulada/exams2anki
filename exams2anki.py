@@ -5,6 +5,7 @@ import sys
 
 import genanki
 from selenium import webdriver
+from tqdm import tqdm
 
 
 def generate_anki_id():
@@ -111,7 +112,7 @@ def get_page_info(driver):
     digits = [int(d) for d in page_info.replace('-', ' ').split(' ') if d.isdigit()]
     if len(digits) < 5:
         raise ValueError('Failed to collect page information!')
-    return {'page': digits[0], 'total': digits[1], 'min_item': digits[2], 'max_item': digits[3], 'total_items': digits[4]}
+    return {'page': digits[0], 'total': digits[1], 'size': digits[3] - digits[2] + 1, 'min_item': digits[2], 'max_item': digits[3], 'total_items': digits[4]}
 
 
 def login(driver, username, password):
@@ -176,13 +177,16 @@ if __name__ == '__main__':
     set_session_settings(driver)
 
     cards = []
-    page_info = None
+    page_info = get_page_info(driver)
     title = get_exam_title(driver)
+
+    pbar = tqdm(total=page_info["total_items"])
     while not page_info or page_info['page'] < page_info['total']:
         page_info = get_page_info(driver)
         cards = cards + exract_cards(driver)
-        # next_page(driver, page_info)
-        break
+        next_page(driver, page_info)
+        pbar.update(page_info["size"])
+    pbar.close()
 
     info = get_exam_info(driver, EXAM_URL)
     driver.close()
