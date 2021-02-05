@@ -4,6 +4,7 @@ Convert [ExamTopics](https://www.examtopics.com/exams/) pages to Anki decks!
 
 ## Requirements
 
+- You can install all required packages with `pip install -r requirements.txt`
 - [chromedriver](https://chromedriver.chromium.org/) must be installed and available on your PATH environment variable
 
 ## Usage
