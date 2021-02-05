@@ -1,0 +1,35 @@
+.card {
+  font-family: arial;
+  font-size: 20px;
+  text-align: left;
+  line-height: 200%;
+}
+
+.question {
+  text-indent: 0px;
+  padding-left: 0px;
+  padding-bottom: 20px;
+}
+
+.ans {
+  color: #1e90ff; /* blue */
+  font-weight: bold;
+}
+
+.exp {
+  color: #808080; /* dark grey */
+  font-size: 16px;
+  line-height: 150%;
+}
+
+.tag {
+  color: #808080;
+  font-size: 12px;
+}
+
+p {
+  margin: 0px;
+  padding: 0px;
+  text-indent: -2em;
+  padding-left: 2em;
+}

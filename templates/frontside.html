@@ -1,0 +1,20 @@
+<span id="front">
+  <p class="question">{{Question}}</p>
+
+  <div id="options"></div>
+</span>
+
+<script>
+  function setOptions() {
+    options = JSON.parse(String.raw`{{Options}}`);
+    optionsDiv = document.getElementById("options");
+    options.forEach((option) => {
+      let node = document.createElement("p");
+      let textnode = document.createTextNode(option);
+      node.appendChild(textnode);
+      optionsDiv.appendChild(node);
+    });
+  }
+
+  setOptions();
+</script>

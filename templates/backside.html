@@ -1,0 +1,28 @@
+{{FrontSide}}
+
+<span id="back">
+  <hr id="answer" />
+
+  <p id="bans" class="ans">{{Answer}}</p>
+
+  <span id="comments" class="exp"></span>
+</span>
+
+<p class="tag">{{#Tags}}Tags: {{Tags}} {{/Tags}}</p>
+
+<script>
+  function setComments() {
+    comments = JSON.parse(String.raw`{{Comments}}`);
+    commentsDiv = document.getElementById("comments");
+    comments.forEach((comment, i) => {
+      let node = document.createElement("p");
+      let textnode = document.createTextNode(
+        `Comment ${i + 1}: ${comment.comment} (upvotes ${comment.upvotes})`
+      );
+      node.appendChild(textnode);
+      commentsDiv.appendChild(node);
+    });
+  }
+
+  setComments();
+</script>

@@ -1,7 +1,74 @@
+import json
 import os
+import random
 import sys
 
+import genanki
 from selenium import webdriver
+
+
+def generate_anki_id():
+    return random.randrange(1 << 30, 1 << 31)
+
+
+def create_deck(name, description):
+    return genanki.Deck(generate_anki_id(), name, description)
+
+
+def create_model(template):
+    return genanki.Model(
+        generate_anki_id(),
+        'ExamTopics',
+        fields=[
+            {'name': 'Question'},
+            {'name': 'Options'},
+            {'name': 'Answer'},
+            {'name': 'Comments'},
+        ],
+        templates=[
+            {
+                'name': 'ExamTopics',
+                'qfmt': template['front'],
+                'afmt': template['back'],
+            },
+        ],
+        css=template['style'])
+
+
+def create_note(model, question, options, answer, comments):
+    return genanki.Note(
+        model=model,
+        fields=[
+            question,
+            json.dumps(options),
+            answer,
+            json.dumps(comments)])
+
+
+def generate_deck(title, description, cards):
+    template = get_deck_template()
+    deck = create_deck(title, description)
+    model = create_model(template)
+    for card in cards:
+        note = create_note(model, card['question'], card['options'], card['answer'], card['comments'])
+        deck.add_note(note)
+    genanki.Package(deck).write_to_file(f'{title}.apkg')
+
+
+def get_deck_template():
+    front_path = get_relative_path(r'templates\frontside.html')
+    back_path = get_relative_path(r'templates\backside.html')
+    style_path = get_relative_path(r'templates\style.css')
+    front_file = open(front_path)
+    front = front_file.read()
+    front_file.close()
+    backfile = open(back_path)
+    back = backfile.read()
+    backfile.close()
+    stylefile = open(style_path)
+    style = stylefile.read()
+    stylefile.close()
+    return {'front': front, 'back': back, 'style': style}
 
 
 def extract_discussions(card):
@@ -12,7 +79,8 @@ def extract_discussions(card):
     if len(comments) != len(contents) or len(contents) != len(upvotes):
         raise ValueError(
             'Expected same length for comments, contents and upvotes!')
-    discussions = [{'comment': contents[i], 'upvotes': upvotes[i]} for i in range(len(comments))]
+    discussions = [{'comment': contents[i].replace('\n', '').strip(), 'upvotes': upvotes[i]}
+                   for i in range(len(comments))]
     return sorted(discussions, key=lambda d: d['upvotes'], reverse=True)[:5]
 
 
@@ -23,7 +91,6 @@ def exract_cards(driver):
     options = [[option.text for option in card.find_elements_by_class_name('multi-choice-item')] for card in cards]
     answers = [card.find_element_by_class_name('question-answer').text for card in cards]
     discussions = [extract_discussions(card) for card in cards]
-    print(discussions)
     if len(questions) != len(options) or len(options) != len(answers) or len(answers) != len(discussions):
         raise ValueError(
             'Expected same length for questions, options, answers and discussions!')
@@ -64,6 +131,30 @@ def set_session_settings(driver):
     driver.find_element_by_class_name('btn-primary').click()
 
 
+def get_exam_title(driver):
+    title = driver.find_element_by_id('exam-box-title').text
+    return title.replace('Exam Actual Questions', '').strip()
+
+
+def get_exam_info(driver, url):
+    driver.get(url)
+    info = driver.find_element_by_class_name('exam-intro-box').text
+    return info
+
+
+def get_driver():
+    chrome_options = webdriver.ChromeOptions()
+    chrome_options.add_argument('headless')
+    chrome_options.add_argument('silent')
+    chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
+    return webdriver.Chrome(options=chrome_options)
+
+
+def get_relative_path(path):
+    script_dir = os.path.dirname(__file__)
+    return os.path.join(script_dir, path)
+
+
 if __name__ == '__main__':
     EXAM_LOGIN = os.environ.get('EXAM_TOPICS_EMAIL', sys.argv[3] if len(sys.argv) > 3 else None)
     EXAM_PASS = os.environ.get('EXAM_TOPICS_PASSWORD', sys.argv[4] if len(sys.argv) > 4 else None)
@@ -78,7 +169,7 @@ if __name__ == '__main__':
         print('To get exam details look for the url on examtopics.com/exams - you MUST have Contributor Access to the exam!')
         exit()
 
-    driver = webdriver.Chrome()
+    driver = get_driver()
     driver.get(f'{EXAM_URL}/custom-view/')
 
     login(driver, EXAM_LOGIN, EXAM_PASS)
@@ -86,9 +177,14 @@ if __name__ == '__main__':
 
     cards = []
     page_info = None
+    title = get_exam_title(driver)
     while not page_info or page_info['page'] < page_info['total']:
         page_info = get_page_info(driver)
         cards = cards + exract_cards(driver)
-        next_page(driver, page_info)
+        # next_page(driver, page_info)
+        break
 
+    info = get_exam_info(driver, EXAM_URL)
     driver.close()
+
+    generate_deck(title, info, cards)
