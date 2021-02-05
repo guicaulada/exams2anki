@@ -1,1 +1,7 @@
 .vscode
+build
+dist
+exams2anki.egg-info
+*.apkg
+**/__pycache__
+!examples/*.apkg

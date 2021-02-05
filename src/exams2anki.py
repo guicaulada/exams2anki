@@ -1,11 +1,40 @@
+import argparse
 import json
 import os
+import pkgutil
 import random
-import sys
+import textwrap
 
 import genanki
 from selenium import webdriver
 from tqdm import tqdm
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(prog='exams2anki',
+                                     description='Convert ExamTopics pages to Anki decks!',
+                                     formatter_class=argparse.RawDescriptionHelpFormatter,
+                                     epilog=textwrap.dedent('''\
+                                        additional information:
+                                          To get exam details look for the url on examtopics.com/exams/<provider>/<exam>
+                                          You MUST have Contributor Access to the exam!
+                                        '''))
+    parser.add_argument('--user', '-u', type=str, dest='username',
+                        default=os.environ.get('EXAMTOPICS_USER'),
+                        help='Your ExamTopics username or email (env: EXAMTOPICS_USER)')
+    parser.add_argument('--pass', '-p', type=str, dest='password',
+                        default=os.environ.get('EXAMTOPICS_PASS'),
+                        help="Your ExamTopics password (env: EXAMTOPICS_PASS)")
+    parser.add_argument('--provider', '-pr', type=str, dest='provider',
+                        help="URL Exam provider (Ex: amazon)")
+    parser.add_argument('--exam', '-e', type=str, dest='exam',
+                        help="URL Exam name (Ex: aws-certified-cloud-practitioner)")
+    parser.add_argument('--debug', action='store_true', dest='debug',
+                        help="Display automated browser")
+    args = parser.parse_args()
+    if not (args.username and args.password):
+        exit(parser.print_usage())
+    return args
 
 
 def generate_anki_id():
@@ -57,18 +86,9 @@ def generate_deck(title, description, cards):
 
 
 def get_deck_template():
-    front_path = get_relative_path(r'templates\frontside.html')
-    back_path = get_relative_path(r'templates\backside.html')
-    style_path = get_relative_path(r'templates\style.css')
-    front_file = open(front_path)
-    front = front_file.read()
-    front_file.close()
-    backfile = open(back_path)
-    back = backfile.read()
-    backfile.close()
-    stylefile = open(style_path)
-    style = stylefile.read()
-    stylefile.close()
+    front = get_data(r'templates\frontside.html')
+    back = get_data(r'templates\backside.html')
+    style = get_data(r'templates\style.css')
     return {'front': front, 'back': back, 'style': style}
 
 
@@ -102,9 +122,9 @@ def exract_cards(driver):
         'comments': discussions[i]} for i in range(len(questions))]
 
 
-def next_page(driver, page_info):
+def next_page(driver, url, page_info):
     if page_info['page'] < page_info['total']:
-        driver.get(f'{EXAM_URL}/view/{page_info["page"] + 1}')
+        driver.get(f'{url}/view/{page_info["page"] + 1}')
 
 
 def get_page_info(driver):
@@ -143,37 +163,27 @@ def get_exam_info(driver, url):
     return info
 
 
-def get_driver():
+def get_driver(args):
     chrome_options = webdriver.ChromeOptions()
-    chrome_options.add_argument('headless')
-    chrome_options.add_argument('silent')
-    chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
+    if not args.debug:
+        chrome_options.add_argument('headless')
+        chrome_options.add_argument('silent')
+        chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
     return webdriver.Chrome(options=chrome_options)
 
 
-def get_relative_path(path):
-    script_dir = os.path.dirname(__file__)
-    return os.path.join(script_dir, path)
+def get_data(path):
+    return pkgutil.get_data('exams2anki', path).decode('utf-8')
 
 
-if __name__ == '__main__':
-    EXAM_LOGIN = os.environ.get('EXAM_TOPICS_EMAIL', sys.argv[3] if len(sys.argv) > 3 else None)
-    EXAM_PASS = os.environ.get('EXAM_TOPICS_PASSWORD', sys.argv[4] if len(sys.argv) > 4 else None)
-    EXAM_PROVIDER = sys.argv[1] if len(sys.argv) > 1 else ''
-    EXAM_NAME = sys.argv[2] if len(sys.argv) > 2 else ''
-    EXAM_URL = f'https://www.examtopics.com/exams/{EXAM_PROVIDER}/{EXAM_NAME}'
+def main():
+    args = parse_args()
+    url = f'https://www.examtopics.com/exams/{args.provider}/{args.exam}'
 
-    if not all([EXAM_PROVIDER, EXAM_NAME, EXAM_LOGIN, EXAM_PASS]):
-        print('Usage: exams2anki.py <provider> <exam> <username> <password>')
-        print('Example: exams2anki.py amazon aws-certified-cloud-practitioner username password')
-        print('You can also set username and password as environment variables EXAM_TOPICS_EMAIL and EXAM_TOPICS_PASSWORD')
-        print('To get exam details look for the url on examtopics.com/exams - you MUST have Contributor Access to the exam!')
-        exit()
+    driver = get_driver(args)
+    driver.get(f'{url}/custom-view/')
 
-    driver = get_driver()
-    driver.get(f'{EXAM_URL}/custom-view/')
-
-    login(driver, EXAM_LOGIN, EXAM_PASS)
+    login(driver, args.username, args.password)
     set_session_settings(driver)
 
     cards = []
@@ -184,11 +194,15 @@ if __name__ == '__main__':
     while not page_info or page_info['page'] < page_info['total']:
         page_info = get_page_info(driver)
         cards = cards + exract_cards(driver)
-        next_page(driver, page_info)
+        next_page(driver, url, page_info)
         pbar.update(page_info["size"])
     pbar.close()
 
-    info = get_exam_info(driver, EXAM_URL)
+    info = get_exam_info(driver, url)
     driver.close()
 
     generate_deck(title, info, cards)
+
+
+if __name__ == '__main__':
+    main()
