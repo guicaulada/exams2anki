@@ -8,7 +8,7 @@ with open('README.md') as f:
 
 setup(
     name='exams2anki',
-    version='1.1.0',
+    version='1.2.0',
     author='Guilherme Caulada',
     author_email='guilherme.caulada@gmail.com',
     url='https://github.com/Sighmir/exams2anki',
