@@ -17,10 +17,10 @@ setup(
     long_description_content_type="text/markdown",
     license='AGPL-3.0',
     package_dir={'': 'src'},
-    data_files=[('templates', [
-        'templates/backside.html',
-        'templates/frontside.html',
-        'templates/style.css',
+    data_files=[('template', [
+        'template/backside.html',
+        'template/frontside.html',
+        'template/style.css',
     ])],
     py_modules=['exams2anki'],
     entry_points={
