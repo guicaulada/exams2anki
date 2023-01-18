@@ -94,7 +94,7 @@ def generate_deck(title, description, cards, template_path):
 def get_deck_template_from_path(path):
     front = read_file(path, 'frontside.html')
     back = read_file(path, 'backside.html')
-    style = read_file(path, 'style.html')
+    style = read_file(path, 'style.css')
     return {'front': front, 'back': back, 'style': style}
 
 
