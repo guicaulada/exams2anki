@@ -165,9 +165,9 @@ def set_session_settings(driver):
     driver.find_element_by_class_name('btn-primary').click()
 
 
-def get_exam_title(driver):
-    title = driver.find_element_by_id('exam-box-title').text
-    return title.replace('Exam Actual Questions', '').strip()
+def get_exam_title(provider, exam):
+    exam = exam.replace('-', ' ')
+    return 'ExamTopics::{}::{}'.format(provider.capitalize(), exam.title())
 
 
 def get_exam_info(driver, url):
@@ -206,7 +206,7 @@ def main():
 
     cards = []
     page_info = get_page_info(driver)
-    title = get_exam_title(driver)
+    title = get_exam_title(args.provider, args.exam)
 
     pbar = tqdm(total=page_info["total_items"])
     while not page_info or page_info['page'] < page_info['total']:
