@@ -31,6 +31,10 @@ python3 setup.py sdist bdist_wheel
 twine upload dist/*
 ```
 
+## Template
+
+You can experiment creating your own template based on the existing ones using the `--template` option.
+
 ## License
 
 ```

@@ -1,4 +1,5 @@
 import argparse
+import io
 import json
 import os
 import pkgutil
@@ -29,6 +30,8 @@ def parse_args():
                         help="URL Exam provider (Ex: amazon)")
     parser.add_argument('--exam', '-e', type=str, dest='exam',
                         help="URL Exam name (Ex: aws-certified-cloud-practitioner)")
+    parser.add_argument('--template', '-t', type=str, dest='template',
+                        help="Template folder path (Ex: ~/template)")
     parser.add_argument('--debug', action='store_true', dest='debug',
                         help="Display automated browser")
     args = parser.parse_args()
@@ -75,8 +78,11 @@ def create_note(model, question, options, answer, comments):
             json.dumps(comments)])
 
 
-def generate_deck(title, description, cards):
-    template = get_deck_template()
+def generate_deck(title, description, cards, template_path):
+    if template_path:
+        template = get_deck_template_from_path(template_path)
+    else:
+        template = get_deck_template_from_resource()
     deck = create_deck(title, description)
     model = create_model(template)
     for card in cards:
@@ -85,10 +91,17 @@ def generate_deck(title, description, cards):
     genanki.Package(deck).write_to_file(f'{title}.apkg')
 
 
-def get_deck_template():
-    front = get_data(r'templates\frontside.html')
-    back = get_data(r'templates\backside.html')
-    style = get_data(r'templates\style.css')
+def get_deck_template_from_path(path):
+    front = read_file(path, 'frontside.html')
+    back = read_file(path, 'backside.html')
+    style = read_file(path, 'style.html')
+    return {'front': front, 'back': back, 'style': style}
+
+
+def get_deck_template_from_resource():
+    front = get_data('template/frontside.html')
+    back = get_data('template/backside.html')
+    style = get_data('template/style.css')
     return {'front': front, 'back': back, 'style': style}
 
 
@@ -105,7 +118,7 @@ def extract_discussions(card):
     return sorted(discussions, key=lambda d: d['upvotes'], reverse=True)[:5]
 
 
-def exract_cards(driver):
+def extract_cards(driver):
     cards = driver.find_elements_by_class_name('exam-question-card')
     questions = [
         card.find_element_by_class_name('card-text').text for card in cards]
@@ -176,6 +189,11 @@ def get_data(path):
     return pkgutil.get_data('exams2anki', path).decode('utf-8')
 
 
+def read_file(folder_path, file):
+    full_path = os.path.join(folder_path, file)
+    return io.open(full_path, 'r', encoding='utf8').read()
+
+
 def main():
     args = parse_args()
     url = f'https://www.examtopics.com/exams/{args.provider}/{args.exam}'
@@ -193,7 +211,7 @@ def main():
     pbar = tqdm(total=page_info["total_items"])
     while not page_info or page_info['page'] < page_info['total']:
         page_info = get_page_info(driver)
-        cards = cards + exract_cards(driver)
+        cards = cards + extract_cards(driver)
         next_page(driver, url, page_info)
         pbar.update(page_info["size"])
     pbar.close()
@@ -201,7 +219,7 @@ def main():
     info = get_exam_info(driver, url)
     driver.close()
 
-    generate_deck(title, info, cards)
+    generate_deck(title, info, cards, args.template)
 
 
 if __name__ == '__main__':
