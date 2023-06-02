@@ -225,7 +225,7 @@ def main():
     info = get_exam_info(driver, url)
     driver.close()
 
-    generate_deck("AWS", "INFO", "cards", args.template)
+    generate_deck(title, info, cards, args.template)
 
 
 if __name__ == '__main__':
