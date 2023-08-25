@@ -1,4 +1,5 @@
 import argparse
+import html
 import io
 import json
 import os
@@ -7,10 +8,10 @@ import random
 import re
 import textwrap
 import time
-import html
 
 import genanki
 from selenium import webdriver
+from selenium.webdriver.common.by import By
 from tqdm import tqdm
 
 
@@ -142,8 +143,8 @@ def get_deck_template_from_resource():
 
 def extract_discussions(card):
     comments = card.find_elements_by_class_name('comment-body')
-    contents = [comment.find_element_by_class_name('comment-content').text for comment in comments]
-    upvotes = [comment.find_element_by_class_name('upvote-text').text for comment in comments]
+    contents = [comment.find_element(By.CLASS_NAME, 'comment-content').text for comment in comments]
+    upvotes = [comment.find_element(By.CLASS_NAME, 'upvote-text').text for comment in comments]
     upvotes = [[int(d) for d in upvote.split(' ') if d.isdigit()][0] for upvote in upvotes]
     if len(comments) != len(contents) or len(contents) != len(upvotes):
         raise ValueError(
@@ -181,8 +182,8 @@ def extract_cards(driver, images_folder):
     extracted_cards = []
 
     for question_index, card in enumerate(cards):
-        question_element = card.find_element_by_class_name('card-text')
-        answer_element = card.find_element_by_class_name('question-answer')
+        question_element = card.find_element(By.CLASS_NAME, 'card-text')
+        answer_element = card.find_element(By.CLASS_NAME, 'question-answer')
 
         question = question_element.text
         answer = answer_element.text
@@ -211,17 +212,18 @@ def next_page(driver, url, page_info):
 
 
 def get_page_info(driver):
-    page_info = driver.find_element_by_class_name('card-text').text
+    page_info = driver.find_element(By.CLASS_NAME, 'card-text').text
     digits = [int(d) for d in page_info.replace('-', ' ').split(' ') if d.isdigit()]
-    if len(digits) < 5:
+    if len(digits) < 1:
         raise ValueError('Failed to collect page information!')
+    time.sleep(10)
     return {'page': digits[0], 'total': digits[1], 'size': digits[3] - digits[2] + 1, 'min_item': digits[2], 'max_item': digits[3], 'total_items': digits[4]}
 
 
 def login(driver, username, password):
-    username_input = driver.find_element_by_class_name('username-text')
-    password_input = driver.find_element_by_class_name('password-text')
-    login_button = driver.find_element_by_class_name('login-button')
+    username_input = driver.find_element(By.ID, 'etemail')
+    password_input = driver.find_element(By.ID, 'etpass')
+    login_button = driver.find_element(By.CLASS_NAME, 'login-button')
     username_input.clear()
     username_input.send_keys(username)
     password_input.clear()
@@ -230,9 +232,9 @@ def login(driver, username, password):
 
 
 def set_session_settings(driver):
-    driver.find_element_by_id('answer-expose-checkbox').click()
-    driver.find_element_by_id('inline-discussions-checkbox').click()
-    driver.find_element_by_class_name('btn-primary').click()
+    driver.find_element(By.ID, 'answer-expose-checkbox').click()
+    driver.find_element(By.ID, 'inline-discussions-checkbox').click()
+    driver.find_element(By.CLASS_NAME, 'btn-primary').click()
 
 
 def get_exam_title(provider, exam):
@@ -242,7 +244,7 @@ def get_exam_title(provider, exam):
 
 def get_exam_info(driver, url):
     driver.get(url)
-    info = driver.find_element_by_class_name('exam-intro-box').text
+    info = driver.find_element(By.CLASS_NAME, 'exam-intro-box').text
     return info
 
 
