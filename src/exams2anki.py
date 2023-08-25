@@ -142,7 +142,7 @@ def get_deck_template_from_resource():
 
 
 def extract_discussions(card):
-    comments = card.find_elements_by_class_name('comment-body')
+    comments = card.find_elements(By.CLASS_NAME, 'comment-body')
     contents = [comment.find_element(By.CLASS_NAME, 'comment-content').text for comment in comments]
     upvotes = [comment.find_element(By.CLASS_NAME, 'upvote-text').text for comment in comments]
     upvotes = [[int(d) for d in upvote.split(' ') if d.isdigit()][0] for upvote in upvotes]
@@ -156,7 +156,7 @@ def extract_discussions(card):
 
 def extract_images_from_element(element, images_folder, question_index, is_answer=False):
     images = []
-    img_elements = element.find_elements_by_tag_name('img')
+    img_elements = element.find_elements(By.TAG_NAME, 'img')
 
     for img_index, img in enumerate(img_elements):
         img_src = img.get_attribute('src')
@@ -178,7 +178,7 @@ def extract_images_from_element(element, images_folder, question_index, is_answe
 
 
 def extract_cards(driver, images_folder):
-    cards = driver.find_elements_by_class_name('exam-question-card')
+    cards = driver.find_elements(By.CLASS_NAME, 'exam-question-card')
     extracted_cards = []
 
     for question_index, card in enumerate(cards):
@@ -191,7 +191,7 @@ def extract_cards(driver, images_folder):
         question_images = extract_images_from_element(question_element, images_folder, question_index)
         answer_images = extract_images_from_element(answer_element, images_folder, question_index, is_answer=True)
 
-        options = [option.text for option in card.find_elements_by_class_name('multi-choice-item')]
+        options = [option.text for option in card.find_elements(By.CLASS_NAME, 'multi-choice-item')]
         discussions = extract_discussions(card)
 
         extracted_cards.append({
