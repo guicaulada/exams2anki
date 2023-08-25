@@ -10,7 +10,7 @@ import time
 import html
 
 import genanki
-from msedge.selenium_tools import Edge, EdgeOptions
+from selenium import webdriver
 from tqdm import tqdm
 
 
@@ -35,6 +35,8 @@ def parse_args():
                         help="URL Exam name (Ex: aws-certified-cloud-practitioner)")
     parser.add_argument('--template', '-t', type=str, dest='template',
                         help="Template folder path (Ex: ~/template)")
+    parser.add_argument('--edge', type=str, dest='template',
+                        help="Use this flag if you have issues with chromedriver")
     parser.add_argument('--debug', action='store_true', dest='debug',
                         help="Display automated browser")
     args = parser.parse_args()
@@ -74,7 +76,7 @@ def create_model(template):
 def create_note(model, question, options, answer, comments, question_images, answer_images, media_files):
     question_images_html = "".join(f"<img src='{img_name}' />" for img_name in question_images)
     answer_images_html = "".join(f"<img src='{img_name}' />" for img_name in answer_images)
-    
+
     question_with_images = f"{question}\n{question_images_html}"
     answer_with_images = f"{answer}\n{answer_images_html}"
 
@@ -87,7 +89,7 @@ def create_note(model, question, options, answer, comments, question_images, ans
             json.dumps([{'comment': html.escape(c['comment']), 'upvotes': c['upvotes']} for c in comments]),
         ],
         tags=["images"]
-    )   
+    )
 
 
 def generate_deck(title, description, cards, template_path, images_folder):
@@ -95,7 +97,7 @@ def generate_deck(title, description, cards, template_path, images_folder):
         template = get_deck_template_from_path(template_path)
     else:
         template = get_deck_template_from_resource()
-    
+
     deck = create_deck(title, description)
     model = create_model(template)
 
@@ -104,22 +106,23 @@ def generate_deck(title, description, cards, template_path, images_folder):
     for card in cards:
         question_images = card['question_images']
         answer_images = card['answer_images']
-        
+
         all_images = question_images + answer_images
-        
+
         for img_name in all_images:
             img_path = os.path.join(images_folder, img_name)
             media_files[img_name] = img_path
 
-        note = create_note(model, card['question'], card['options'], card['answer'], card['comments'], question_images, answer_images, media_files)
+        note = create_note(model, card['question'], card['options'], card['answer'],
+                           card['comments'], question_images, answer_images, media_files)
         deck.add_note(note)
 
     sanitized_title = re.sub(r'[\\/:*?"<>|]', '', title)
     package = genanki.Package(deck)
-    
-    for media_name, media_path in media_files.items():
+
+    for _, media_path in media_files.items():
         package.media_files.append(media_path)
-    
+
     package.write_to_file(f'{sanitized_title}.apkg')
 
 
@@ -157,20 +160,21 @@ def extract_images_from_element(element, images_folder, question_index, is_answe
     for img_index, img in enumerate(img_elements):
         img_src = img.get_attribute('src')
         img_extension = os.path.splitext(img_src)[1]
-        
+
         if is_answer:
             img_name = f"answer_{question_index}_{img_index}{img_extension}"
         else:
             img_name = f"question_{question_index}_{img_index}{img_extension}"
-            
+
         img_path = os.path.join(images_folder, img_name)
-        
+
         if not os.path.exists(img_path):
             img.screenshot(img_path)
-            
+
         images.append(img_name)
 
     return images
+
 
 def extract_cards(driver, images_folder):
     cards = driver.find_elements_by_class_name('exam-question-card')
@@ -179,13 +183,13 @@ def extract_cards(driver, images_folder):
     for question_index, card in enumerate(cards):
         question_element = card.find_element_by_class_name('card-text')
         answer_element = card.find_element_by_class_name('question-answer')
-        
+
         question = question_element.text
         answer = answer_element.text
-        
+
         question_images = extract_images_from_element(question_element, images_folder, question_index)
         answer_images = extract_images_from_element(answer_element, images_folder, question_index, is_answer=True)
-        
+
         options = [option.text for option in card.find_elements_by_class_name('multi-choice-item')]
         discussions = extract_discussions(card)
 
@@ -242,11 +246,20 @@ def get_exam_info(driver, url):
     return info
 
 
-def get_driver(args):
-    edge_options = EdgeOptions()
+def get_edge_driver(args):
+    edge_options = webdriver.EdgeOptions()
     if not args.debug:
         edge_options.add_argument('headless')
-    return Edge(executable_path='C:\webdriver\msedgedriver.exe', options=edge_options)
+    return webdriver.Edge(options=edge_options)
+
+
+def get_chrome_driver(args):
+    chrome_options = webdriver.ChromeOptions()
+    if not args.debug:
+        chrome_options.add_argument('headless')
+        chrome_options.add_argument('silent')
+        chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
+    return webdriver.Chrome(options=chrome_options)
 
 
 def get_data(path):
@@ -261,11 +274,16 @@ def read_file(folder_path, file):
 def main():
     args = parse_args()
     url = f'https://www.examtopics.com/exams/{args.provider}/{args.exam}'
-    
+
     images_folder = os.path.join(os.getcwd(), 'images', args.provider, args.exam)
     os.makedirs(images_folder, exist_ok=True)  # Create the folder if it doesn't exist
-    
-    driver = get_driver(args)
+
+    driver = None
+    if args.edge:
+        driver = get_edge_driver(args)
+    else:
+        driver = get_chrome_driver(args)
+
     driver.get(f'{url}/custom-view/')
 
     login(driver, args.username, args.password)

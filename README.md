@@ -4,6 +4,9 @@ Convert [ExamTopics](https://www.examtopics.com/exams/) pages to Anki decks!
 
 ## Requirements
 
+- [chromedriver](https://chromedriver.chromium.org/) must be installed and available on your PATH environment variable
+
+# Optionally
 - [Edge WebDriver](https://developer.microsoft.com/en-us/microsoft-edge/tools/webdriver/) must be installed and available on your PATH environment variable
 
 ## Installation
