@@ -4,12 +4,16 @@ import json
 import os
 import pkgutil
 import random
+import time 
 import textwrap
+from tqdm import tqdm
 
 import genanki
 from selenium import webdriver
-from tqdm import tqdm
 
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
 
 def parse_args():
     parser = argparse.ArgumentParser(prog='exams2anki',
@@ -107,8 +111,8 @@ def get_deck_template_from_resource():
 
 def extract_discussions(card):
     comments = card.find_elements_by_class_name('comment-body')
-    contents = [comment.find_element_by_class_name('comment-content').text for comment in comments]
-    upvotes = [comment.find_element_by_class_name('upvote-text').text for comment in comments]
+    contents = [comment.find_element(By.CLASS_NAME, 'comment-content').text for comment in comments]
+    upvotes = [comment.find_element(By.CLASS_NAME, 'upvote-text').text for comment in comments]
     upvotes = [[int(d) for d in upvote.split(' ') if d.isdigit()][0] for upvote in upvotes]
     if len(comments) != len(contents) or len(contents) != len(upvotes):
         raise ValueError(
@@ -121,9 +125,9 @@ def extract_discussions(card):
 def extract_cards(driver):
     cards = driver.find_elements_by_class_name('exam-question-card')
     questions = [
-        card.find_element_by_class_name('card-text').text for card in cards]
+        card.find_element(By.CLASS_NAME, 'card-text').text for card in cards]
     options = [[option.text for option in card.find_elements_by_class_name('multi-choice-item')] for card in cards]
-    answers = [card.find_element_by_class_name('question-answer').text for card in cards]
+    answers = [card.find_element(By.CLASS_NAME, 'question-answer').text for card in cards]
     discussions = [extract_discussions(card) for card in cards]
     if len(questions) != len(options) or len(options) != len(answers) or len(answers) != len(discussions):
         raise ValueError(
@@ -141,17 +145,17 @@ def next_page(driver, url, page_info):
 
 
 def get_page_info(driver):
-    page_info = driver.find_element_by_class_name('card-text').text
+    page_info = driver.find_element(By.CLASS_NAME, 'card-text').text
     digits = [int(d) for d in page_info.replace('-', ' ').split(' ') if d.isdigit()]
-    if len(digits) < 5:
+    if len(digits) < 1:
         raise ValueError('Failed to collect page information!')
+    time.sleep(10)
     return {'page': digits[0], 'total': digits[1], 'size': digits[3] - digits[2] + 1, 'min_item': digits[2], 'max_item': digits[3], 'total_items': digits[4]}
 
-
 def login(driver, username, password):
-    username_input = driver.find_element_by_class_name('username-text')
-    password_input = driver.find_element_by_class_name('password-text')
-    login_button = driver.find_element_by_class_name('login-button')
+    username_input = driver.find_element(By.ID, 'etemail')
+    password_input = driver.find_element(By.ID, 'etpass')
+    login_button = driver.find_element(By.CLASS_NAME,'login-button')
     username_input.clear()
     username_input.send_keys(username)
     password_input.clear()
@@ -160,9 +164,9 @@ def login(driver, username, password):
 
 
 def set_session_settings(driver):
-    driver.find_element_by_id('answer-expose-checkbox').click()
-    driver.find_element_by_id('inline-discussions-checkbox').click()
-    driver.find_element_by_class_name('btn-primary').click()
+    driver.find_element(By.ID, 'answer-expose-checkbox').click()
+    driver.find_element(By.ID, 'inline-discussions-checkbox').click()
+    driver.find_element(By.CLASS_NAME, 'btn-primary').click()
 
 
 def get_exam_title(provider, exam):
@@ -172,17 +176,19 @@ def get_exam_title(provider, exam):
 
 def get_exam_info(driver, url):
     driver.get(url)
-    info = driver.find_element_by_class_name('exam-intro-box').text
+    info = driver.find_element(By.CLASS_NAME, 'exam-intro-box').text
     return info
 
 
 def get_driver(args):
-    chrome_options = webdriver.ChromeOptions()
-    if not args.debug:
-        chrome_options.add_argument('headless')
-        chrome_options.add_argument('silent')
-        chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
-    return webdriver.Chrome(options=chrome_options)
+    # chrome_options = webdriver.ChromeOptions()
+    # if not args.debug:
+    #     chrome_options.add_argument('headless')
+    #     chrome_options.add_argument('silent')
+    #     chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
+    service = Service(ChromeDriverManager().install())
+    navagator = webdriver.Chrome(service=service)
+    return navagator
 
 
 def get_data(path):
@@ -201,7 +207,7 @@ def main():
     driver = get_driver(args)
     driver.get(f'{url}/custom-view/')
 
-    login(driver, args.username, args.password)
+    login(driver,  args.username, args.password)
     set_session_settings(driver)
 
     cards = []
