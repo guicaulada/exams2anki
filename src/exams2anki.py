@@ -6,6 +6,7 @@ import os
 import pkgutil
 import random
 import re
+import tempfile
 import textwrap
 import time
 
@@ -61,8 +62,10 @@ def create_model(template):
         'ExamTopics',
         fields=[
             {'name': 'Question'},
+            {'name': 'Question Images'},
             {'name': 'Options'},
             {'name': 'Answer'},
+            {'name': 'Answer Images'},
             {'name': 'Comments'},
         ],
         templates=[
@@ -75,22 +78,17 @@ def create_model(template):
         css=template['style'])
 
 
-def create_note(model, question, options, answer, comments, question_images, answer_images, media_files):
-    question_images_html = "".join(f"<img src='{img_name}' />" for img_name in question_images)
-    answer_images_html = "".join(f"<img src='{img_name}' />" for img_name in answer_images)
-
-    question_with_images = f"{question}\n{question_images_html}"
-    answer_with_images = f"{answer}\n{answer_images_html}"
-
+def create_note(model, question, options, answer, comments, question_images, answer_images):
     return genanki.Note(
         model=model,
         fields=[
-            question_with_images,
-            json.dumps([html.escape(option) for option in options]),
-            answer_with_images,
-            json.dumps([{'comment': html.escape(c['comment']), 'upvotes': c['upvotes']} for c in comments]),
+            html.unescape(question),
+            json.dumps(question_images),
+            json.dumps([html.unescape(option) for option in options]),
+            html.unescape(answer),
+            json.dumps(answer_images),
+            json.dumps([{'comment': html.unescape(c['comment']), 'upvotes': c['upvotes']} for c in comments]),
         ],
-        tags=["images"]
     )
 
 
@@ -103,26 +101,18 @@ def generate_deck(title, description, cards, template_path, images_folder):
     deck = create_deck(title, description)
     model = create_model(template)
 
-    media_files = {}  # Dictionary to store media files
-
+    media_files = []
     for card in cards:
-        question_images = card['question_images']
-        answer_images = card['answer_images']
-
-        all_images = question_images + answer_images
-
-        for img_name in all_images:
-            img_path = os.path.join(images_folder, img_name)
-            media_files[img_name] = img_path
-
+        media_files.extend([os.path.join(images_folder, img_name) for img_name in card['question_images']])
+        media_files.extend([os.path.join(images_folder, img_name) for img_name in card['answer_images']])
         note = create_note(model, card['question'], card['options'], card['answer'],
-                           card['comments'], question_images, answer_images, media_files)
+                           card['comments'], card['question_images'], card['answer_images'])
         deck.add_note(note)
 
     sanitized_title = re.sub(r'[\\/:*?"<>|]', '', title)
     package = genanki.Package(deck)
 
-    for _, media_path in media_files.items():
+    for media_path in media_files:
         package.media_files.append(media_path)
 
     package.write_to_file(f'{sanitized_title}.apkg')
@@ -171,7 +161,7 @@ def extract_images_from_element(element, images_folder, question_index, is_answe
         img_path = os.path.join(images_folder, img_name)
 
         if not os.path.exists(img_path):
-            img.screenshot(img_path)
+            img.screenshot("{}.png".format(img_path))
 
         images.append(img_name)
 
@@ -283,9 +273,6 @@ def main():
     args = parse_args()
     url = f'https://www.examtopics.com/exams/{args.provider}/{args.exam}'
 
-    images_folder = os.path.join(os.getcwd(), 'images', args.provider, args.exam)
-    os.makedirs(images_folder, exist_ok=True)  # Create the folder if it doesn't exist
-
     driver = None
     if args.edge:
         driver = get_edge_driver(args)
@@ -304,11 +291,14 @@ def main():
     page_info = get_page_info(driver)
     title = get_exam_title(args.provider, args.exam)
 
+    images_folder = tempfile.mkdtemp()
+    os.makedirs(images_folder, exist_ok=True)
+
     print("Extracting answers...")
     pbar = tqdm(total=page_info["total_items"])
     while not page_info or page_info['page'] < page_info['total']:
         page_info = get_page_info(driver)
-        cards = cards + extract_cards(driver, images_folder, pbar)  # Pass images_folder here
+        cards = cards + extract_cards(driver, images_folder, pbar)
         next_page(driver, url, page_info)
 
     pbar.close()
@@ -318,7 +308,7 @@ def main():
     driver.quit()
 
     print("Generating deck...")
-    generate_deck(title, info, cards, args.template, images_folder)  # Pass images_folder here
+    generate_deck(title, info, cards, args.template, images_folder)
 
 
 if __name__ == '__main__':
