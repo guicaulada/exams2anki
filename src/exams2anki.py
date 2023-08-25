@@ -35,7 +35,7 @@ def parse_args():
                         help="URL Exam name (Ex: aws-certified-cloud-practitioner)")
     parser.add_argument('--template', '-t', type=str, dest='template',
                         help="Template folder path (Ex: ~/template)")
-    parser.add_argument('--edge', type=str, dest='template',
+    parser.add_argument('--edge', action='store_true', dest='edge',
                         help="Use this flag if you have issues with chromedriver")
     parser.add_argument('--debug', action='store_true', dest='debug',
                         help="Display automated browser")
