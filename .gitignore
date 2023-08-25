@@ -1,4 +1,5 @@
 .vscode
+.venv
 build
 dist
 exams2anki.egg-info
