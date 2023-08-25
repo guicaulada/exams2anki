@@ -12,6 +12,7 @@ import time
 import genanki
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from tqdm import tqdm
 
 
@@ -34,7 +35,7 @@ def parse_args():
                         help="URL Exam provider (Ex: amazon)")
     parser.add_argument('--exam', '-e', type=str, dest='exam',
                         help="URL Exam name (Ex: aws-certified-cloud-practitioner)")
-    parser.add_argument('--template', '-t', type=str, dest='template',
+    parser.add_argument('--template', '-t', type=str, dest='template', default="./template",
                         help="Template folder path (Ex: ~/template)")
     parser.add_argument('--edge', action='store_true', dest='edge',
                         help="Use this flag if you have issues with chromedriver")
@@ -177,7 +178,7 @@ def extract_images_from_element(element, images_folder, question_index, is_answe
     return images
 
 
-def extract_cards(driver, images_folder):
+def extract_cards(driver, images_folder, pbar):
     cards = driver.find_elements(By.CLASS_NAME, 'exam-question-card')
     extracted_cards = []
 
@@ -202,6 +203,8 @@ def extract_cards(driver, images_folder):
             'question_images': question_images,
             'answer_images': answer_images
         })
+
+        pbar.update(1)
 
     return extracted_cards
 
@@ -232,8 +235,11 @@ def login(driver, username, password):
 
 
 def set_session_settings(driver):
-    driver.find_element(By.ID, 'answer-expose-checkbox').click()
     driver.find_element(By.ID, 'inline-discussions-checkbox').click()
+    driver.find_element(By.ID, 'answer-expose-checkbox').click()
+    slider = driver.find_element(By.ID, 'QuestionCount')
+    for _ in range(100):
+        slider.send_keys(Keys.ARROW_RIGHT)
     driver.find_element(By.CLASS_NAME, 'btn-primary').click()
 
 
@@ -288,27 +294,30 @@ def main():
 
     driver.get(f'{url}/custom-view/')
 
+    print("Logging in...")
     login(driver, args.username, args.password)
+
+    print("Preparing session settings...")
     set_session_settings(driver)
 
     cards = []
     page_info = get_page_info(driver)
     title = get_exam_title(args.provider, args.exam)
 
+    print("Extracting answers...")
     pbar = tqdm(total=page_info["total_items"])
     while not page_info or page_info['page'] < page_info['total']:
         page_info = get_page_info(driver)
-        cards = cards + extract_cards(driver, images_folder)  # Pass images_folder here
+        cards = cards + extract_cards(driver, images_folder, pbar)  # Pass images_folder here
         next_page(driver, url, page_info)
-        pbar.update(page_info["size"])
-
-        time.sleep(1)
 
     pbar.close()
 
+    print("Getting exam information...")
     info = get_exam_info(driver, url)
     driver.quit()
 
+    print("Generating deck...")
     generate_deck(title, info, cards, args.template, images_folder)  # Pass images_folder here
 
 
