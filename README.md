@@ -18,6 +18,14 @@ Chrome will be used by default, if you wish to use the Edge WebDriver use the fl
 
 - `exams2anki --help`
 
+## Running from local repository
+
+If you have cloned this repository you can run, for example:
+
+```
+python3 src/exams2anki.py -u <user> -p '<password>' -pr amazon -e aws-certified-cloud-practitioner
+```
+
 ## Install local version
 
 If you have cloned this repository you can run:
