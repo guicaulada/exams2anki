@@ -1,19 +1,21 @@
 import argparse
+import html
 import io
 import json
 import os
 import pkgutil
 import random
-import time 
+import re
+import tempfile
 import textwrap
-from tqdm import tqdm
+import time
 
 import genanki
 from selenium import webdriver
-
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from tqdm import tqdm
+
 
 def parse_args():
     parser = argparse.ArgumentParser(prog='exams2anki',
@@ -34,8 +36,10 @@ def parse_args():
                         help="URL Exam provider (Ex: amazon)")
     parser.add_argument('--exam', '-e', type=str, dest='exam',
                         help="URL Exam name (Ex: aws-certified-cloud-practitioner)")
-    parser.add_argument('--template', '-t', type=str, dest='template',
+    parser.add_argument('--template', '-t', type=str, dest='template', default="./template",
                         help="Template folder path (Ex: ~/template)")
+    parser.add_argument('--edge', action='store_true', dest='edge',
+                        help="Use this flag if you have issues with chromedriver")
     parser.add_argument('--debug', action='store_true', dest='debug',
                         help="Display automated browser")
     args = parser.parse_args()
@@ -58,8 +62,10 @@ def create_model(template):
         'ExamTopics',
         fields=[
             {'name': 'Question'},
+            {'name': 'Question Images'},
             {'name': 'Options'},
             {'name': 'Answer'},
+            {'name': 'Answer Images'},
             {'name': 'Comments'},
         ],
         templates=[
@@ -72,27 +78,44 @@ def create_model(template):
         css=template['style'])
 
 
-def create_note(model, question, options, answer, comments):
+def create_note(model, question, options, answer, comments, question_images, answer_images):
     return genanki.Note(
         model=model,
         fields=[
-            question,
-            json.dumps(options),
-            answer,
-            json.dumps(comments)])
+            html.unescape(question),
+            json.dumps(question_images),
+            json.dumps([html.unescape(option) for option in options]),
+            html.unescape(answer),
+            json.dumps(answer_images),
+            json.dumps([{'comment': html.unescape(c['comment']), 'upvotes': c['upvotes']} for c in comments]),
+        ],
+    )
 
 
-def generate_deck(title, description, cards, template_path):
+def generate_deck(title, description, cards, template_path, images_folder):
     if template_path:
         template = get_deck_template_from_path(template_path)
     else:
         template = get_deck_template_from_resource()
+
     deck = create_deck(title, description)
     model = create_model(template)
+
+    media_files = []
     for card in cards:
-        note = create_note(model, card['question'], card['options'], card['answer'], card['comments'])
+        media_files.extend([os.path.join(images_folder, img_name) for img_name in card['question_images']])
+        media_files.extend([os.path.join(images_folder, img_name) for img_name in card['answer_images']])
+        note = create_note(model, card['question'], card['options'], card['answer'],
+                           card['comments'], card['question_images'], card['answer_images'])
         deck.add_note(note)
-    genanki.Package(deck).write_to_file(f'{title}.apkg')
+
+    sanitized_title = re.sub(r'[\\/:*?"<>|]', '', title)
+    package = genanki.Package(deck)
+
+    for media_path in media_files:
+        package.media_files.append(media_path)
+
+    package.write_to_file(f'{sanitized_title}.apkg')
 
 
 def get_deck_template_from_path(path):
@@ -110,33 +133,70 @@ def get_deck_template_from_resource():
 
 
 def extract_discussions(card):
-    comments = card.find_elements_by_class_name('comment-body')
+    comments = card.find_elements(By.CLASS_NAME, 'comment-body')
     contents = [comment.find_element(By.CLASS_NAME, 'comment-content').text for comment in comments]
     upvotes = [comment.find_element(By.CLASS_NAME, 'upvote-text').text for comment in comments]
     upvotes = [[int(d) for d in upvote.split(' ') if d.isdigit()][0] for upvote in upvotes]
     if len(comments) != len(contents) or len(contents) != len(upvotes):
         raise ValueError(
             'Expected same length for comments, contents and upvotes!')
-    discussions = [{'comment': contents[i].replace('\n', '').strip(), 'upvotes': upvotes[i]}
+    discussions = [{'comment': contents[i].replace('\n', ' ').strip(), 'upvotes': upvotes[i]}
                    for i in range(len(comments))]
     return sorted(discussions, key=lambda d: d['upvotes'], reverse=True)[:5]
 
 
-def extract_cards(driver):
-    cards = driver.find_elements_by_class_name('exam-question-card')
-    questions = [
-        card.find_element(By.CLASS_NAME, 'card-text').text for card in cards]
-    options = [[option.text for option in card.find_elements_by_class_name('multi-choice-item')] for card in cards]
-    answers = [card.find_element(By.CLASS_NAME, 'question-answer').text for card in cards]
-    discussions = [extract_discussions(card) for card in cards]
-    if len(questions) != len(options) or len(options) != len(answers) or len(answers) != len(discussions):
-        raise ValueError(
-            'Expected same length for questions, options, answers and discussions!')
-    return [{
-        'question': questions[i],
-        'options': options[i],
-        'answer': answers[i],
-        'comments': discussions[i]} for i in range(len(questions))]
+def extract_images_from_element(element, images_folder, question_index, is_answer=False):
+    images = []
+    img_elements = element.find_elements(By.TAG_NAME, 'img')
+
+    for img_index, img in enumerate(img_elements):
+        img_src = img.get_attribute('src')
+        img_extension = os.path.splitext(img_src)[1]
+
+        if is_answer:
+            img_name = f"answer_{question_index}_{img_index}{img_extension}"
+        else:
+            img_name = f"question_{question_index}_{img_index}{img_extension}"
+
+        img_path = os.path.join(images_folder, img_name)
+
+        if not os.path.exists(img_path):
+            img.screenshot(img_path)
+
+        images.append(img_name)
+
+    return images
+
+
+def extract_cards(driver, images_folder, pbar):
+    cards = driver.find_elements(By.CLASS_NAME, 'exam-question-card')
+    extracted_cards = []
+
+    for question_index, card in enumerate(cards):
+        question_element = card.find_element(By.CLASS_NAME, 'card-text')
+        answer_element = card.find_element(By.CLASS_NAME, 'question-answer')
+
+        question = question_element.text
+        answer = answer_element.text
+
+        question_images = extract_images_from_element(question_element, images_folder, question_index)
+        answer_images = extract_images_from_element(answer_element, images_folder, question_index, is_answer=True)
+
+        options = [option.text for option in card.find_elements(By.CLASS_NAME, 'multi-choice-item')]
+        discussions = extract_discussions(card)
+
+        extracted_cards.append({
+            'question': question,
+            'answer': answer,
+            'options': options,
+            'comments': discussions,
+            'question_images': question_images,
+            'answer_images': answer_images
+        })
+
+        pbar.update(1)
+
+    return extracted_cards
 
 
 def next_page(driver, url, page_info):
@@ -152,10 +212,11 @@ def get_page_info(driver):
     time.sleep(10)
     return {'page': digits[0], 'total': digits[1], 'size': digits[3] - digits[2] + 1, 'min_item': digits[2], 'max_item': digits[3], 'total_items': digits[4]}
 
+
 def login(driver, username, password):
     username_input = driver.find_element(By.ID, 'etemail')
     password_input = driver.find_element(By.ID, 'etpass')
-    login_button = driver.find_element(By.CLASS_NAME,'login-button')
+    login_button = driver.find_element(By.CLASS_NAME, 'login-button')
     username_input.clear()
     username_input.send_keys(username)
     password_input.clear()
@@ -164,8 +225,11 @@ def login(driver, username, password):
 
 
 def set_session_settings(driver):
-    driver.find_element(By.ID, 'answer-expose-checkbox').click()
     driver.find_element(By.ID, 'inline-discussions-checkbox').click()
+    driver.find_element(By.ID, 'answer-expose-checkbox').click()
+    slider = driver.find_element(By.ID, 'QuestionCount')
+    for _ in range(100):
+        slider.send_keys(Keys.ARROW_RIGHT)
     driver.find_element(By.CLASS_NAME, 'btn-primary').click()
 
 
@@ -180,15 +244,20 @@ def get_exam_info(driver, url):
     return info
 
 
-def get_driver(args):
-    # chrome_options = webdriver.ChromeOptions()
-    # if not args.debug:
-    #     chrome_options.add_argument('headless')
-    #     chrome_options.add_argument('silent')
-    #     chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
-    service = Service(ChromeDriverManager().install())
-    navagator = webdriver.Chrome(service=service)
-    return navagator
+def get_edge_driver(args):
+    edge_options = webdriver.EdgeOptions()
+    if not args.debug:
+        edge_options.add_argument('headless')
+    return webdriver.Edge(options=edge_options)
+
+
+def get_chrome_driver(args):
+    chrome_options = webdriver.ChromeOptions()
+    if not args.debug:
+        chrome_options.add_argument('headless')
+        chrome_options.add_argument('silent')
+        chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
+    return webdriver.Chrome(options=chrome_options)
 
 
 def get_data(path):
@@ -204,28 +273,41 @@ def main():
     args = parse_args()
     url = f'https://www.examtopics.com/exams/{args.provider}/{args.exam}'
 
-    driver = get_driver(args)
+    driver = None
+    if args.edge:
+        driver = get_edge_driver(args)
+    else:
+        driver = get_chrome_driver(args)
+
     driver.get(f'{url}/custom-view/')
 
-    login(driver,  args.username, args.password)
+    print("Logging in...")
+    login(driver, args.username, args.password)
+
+    print("Preparing session settings...")
     set_session_settings(driver)
 
     cards = []
     page_info = get_page_info(driver)
     title = get_exam_title(args.provider, args.exam)
 
+    print("Extracting answers...")
+    images_folder = tempfile.TemporaryDirectory()
     pbar = tqdm(total=page_info["total_items"])
     while not page_info or page_info['page'] < page_info['total']:
         page_info = get_page_info(driver)
-        cards = cards + extract_cards(driver)
+        cards = cards + extract_cards(driver, images_folder.name, pbar)
         next_page(driver, url, page_info)
-        pbar.update(page_info["size"])
+
     pbar.close()
 
+    print("Getting exam information...")
     info = get_exam_info(driver, url)
-    driver.close()
+    driver.quit()
 
-    generate_deck(title, info, cards, args.template)
+    print("Generating deck...")
+    generate_deck(title, info, cards, args.template, images_folder.name)
+    images_folder.cleanup()
 
 
 if __name__ == '__main__':

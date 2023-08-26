@@ -5,12 +5,23 @@
 
   <p id="bans" class="ans">{{Answer}}</p>
 
+  <span id="answer-images" class="exp"></span>
   <span id="comments" class="exp"></span>
 </span>
 
 <p class="tag">{{#Tags}}Tags: {{Tags}} {{/Tags}}</p>
 
 <script>
+  function setAnswerImages() {
+    images = JSON.parse(String.raw`{{Answer Images}}`);
+    imagesDiv = document.getElementById("answer-images");
+    images.forEach((image, i) => {
+      let node = document.createElement("img");
+      node.src = image;
+      imagesDiv.appendChild(node);
+    });
+  }
+
   function setComments() {
     comments = JSON.parse(String.raw`{{Comments}}`);
     commentsDiv = document.getElementById("comments");
@@ -24,5 +35,6 @@
     });
   }
 
+  setAnswerImages();
   setComments();
 </script>

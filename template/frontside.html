@@ -1,10 +1,21 @@
 <span id="front">
   <p class="question">{{Question}}</p>
+  <div id="question-images" class="exp"></div>
 
   <div id="options"></div>
 </span>
 
 <script>
+  function setQuestionImages() {
+    images = JSON.parse(String.raw`{{Question Images}}`);
+    imagesDiv = document.getElementById("question-images");
+    images.forEach((image, i) => {
+      let node = document.createElement("img");
+      node.src = image;
+      imagesDiv.appendChild(node);
+    });
+  }
+
   function setOptions() {
     options = JSON.parse(String.raw`{{Options}}`);
     optionsDiv = document.getElementById("options");
@@ -16,5 +27,6 @@
     });
   }
 
+  setQuestionImages();
   setOptions();
 </script>
