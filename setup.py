@@ -8,7 +8,7 @@ with open('README.md') as f:
 
 setup(
     name='exams2anki',
-    version='1.2.1',
+    version='1.3.0',
     author='Guilherme Caulada',
     author_email='guilherme.caulada@gmail.com',
     url='https://github.com/Sighmir/exams2anki',
@@ -28,11 +28,11 @@ setup(
             'exams2anki = exams2anki:main'
         ]
     },
-    classifiers=(
+    classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: GNU Affero General Public License v3",
         "Operating System :: OS Independent",
-    ),
+    ],
     keywords='anki examtopics exam certification cert sighmir',
     install_requires=requirements,
     zip_safe=False
