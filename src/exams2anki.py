@@ -140,7 +140,7 @@ def extract_discussions(card):
     if len(comments) != len(contents) or len(contents) != len(upvotes):
         raise ValueError(
             'Expected same length for comments, contents and upvotes!')
-    discussions = [{'comment': contents[i].replace('\n', '').strip(), 'upvotes': upvotes[i]}
+    discussions = [{'comment': contents[i].replace('\n', ' ').strip(), 'upvotes': upvotes[i]}
                    for i in range(len(comments))]
     return sorted(discussions, key=lambda d: d['upvotes'], reverse=True)[:5]
 
@@ -161,7 +161,7 @@ def extract_images_from_element(element, images_folder, question_index, is_answe
         img_path = os.path.join(images_folder, img_name)
 
         if not os.path.exists(img_path):
-            img.screenshot("{}.png".format(img_path))
+            img.screenshot(img_path)
 
         images.append(img_name)
 
@@ -291,14 +291,12 @@ def main():
     page_info = get_page_info(driver)
     title = get_exam_title(args.provider, args.exam)
 
-    images_folder = tempfile.mkdtemp()
-    os.makedirs(images_folder, exist_ok=True)
-
     print("Extracting answers...")
+    images_folder = tempfile.TemporaryDirectory()
     pbar = tqdm(total=page_info["total_items"])
     while not page_info or page_info['page'] < page_info['total']:
         page_info = get_page_info(driver)
-        cards = cards + extract_cards(driver, images_folder, pbar)
+        cards = cards + extract_cards(driver, images_folder.name, pbar)
         next_page(driver, url, page_info)
 
     pbar.close()
@@ -308,7 +306,8 @@ def main():
     driver.quit()
 
     print("Generating deck...")
-    generate_deck(title, info, cards, args.template, images_folder)
+    generate_deck(title, info, cards, args.template, images_folder.name)
+    images_folder.cleanup()
 
 
 if __name__ == '__main__':
